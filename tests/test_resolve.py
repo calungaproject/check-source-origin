@@ -73,6 +73,49 @@ class TestResolveSource:
         assert result.resolution_method in ("related_project", "pypi_metadata")
         assert "github.com" in result.repo_url
 
+    def test_attestation_cross_references_metadata_source_repo(self) -> None:
+        """When attestation sourceRepository differs from UNVERIFIED_METADATA
+        source repo, prefer the metadata repo (the actual source)."""
+        github_ref_resp = httpx.Response(
+            200,
+            json={
+                "ref": "refs/tags/v2.4.6",
+                "object": {
+                    "sha": "65daff092ee0f3d92f166630d32d6b9c81d99343",
+                    "type": "tag",
+                },
+            },
+            request=_FAKE_REQ,
+        )
+        github_tag_resp = httpx.Response(
+            200,
+            json={
+                "object": {
+                    "sha": "b832a09cf2a169c833dd2371e7c07aa00b293242",
+                    "type": "commit",
+                },
+            },
+            request=_FAKE_REQ,
+        )
+
+        def mock_get(url: str, **kwargs):
+            full = str(url)
+            if "/git/ref/tags/" in full:
+                return github_ref_resp
+            if "/git/tags/" in full:
+                return github_tag_resp
+            if "/systems/pypi/" in full:
+                data = _load_fixture("depsdev_numpy_2.4.6.json")
+                return httpx.Response(200, json=data, request=_FAKE_REQ)
+            return httpx.Response(404, json={}, request=_FAKE_REQ)
+
+        with patch.object(httpx.Client, "get", side_effect=mock_get):
+            result = resolve_source("numpy", "2.4.6")
+        assert result.repo_url == "https://github.com/numpy/numpy"
+        assert result.commit == "b832a09cf2a169c833dd2371e7c07aa00b293242"
+        assert result.verified is True
+        assert result.resolution_method == "attestation"
+
     def test_raises_when_nothing_found(self) -> None:
         empty_depsdev = {
             "versionKey": {"system": "PYPI", "name": "x", "version": "0"},
