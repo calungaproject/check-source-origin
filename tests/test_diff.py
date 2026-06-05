@@ -2,7 +2,6 @@ import hashlib
 from pathlib import Path
 
 from check_source_origin.diff import (
-    GENERATED_PATTERNS,
     compare_trees,
     hash_file,
     is_generated,

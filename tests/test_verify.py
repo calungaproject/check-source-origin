@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from check_source_origin.models import ResolveResult
-from check_source_origin.verify import run_verify, VerifyResult
+from check_source_origin.verify import run_verify
 
 
 def _make_sdist_tarball(tmp_path: Path, files: dict[str, str]) -> Path:

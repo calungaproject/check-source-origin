@@ -7,8 +7,6 @@ from pathlib import Path
 import click
 
 from .diff import compare_trees
-from .download import download_sdist
-from .pypi import PyPIClient
 from .resolve import resolve_source
 from .verify import clone_repo, extract_sdist, fetch_sdist, run_verify
 

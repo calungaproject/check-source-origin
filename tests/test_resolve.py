@@ -4,8 +4,6 @@ from unittest.mock import patch
 
 import httpx
 
-from check_source_origin.depsdev import DepsDevClient
-from check_source_origin.pypi import PyPIClient
 from check_source_origin.resolve import resolve_source
 
 FIXTURES = Path(__file__).parent / "fixtures"
