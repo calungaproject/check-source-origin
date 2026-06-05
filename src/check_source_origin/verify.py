@@ -37,10 +37,24 @@ def clone_repo(repo_url: str, ref: str, dest: Path) -> Path:
         check=True,
         capture_output=True,
     )
+    subprocess.run(
+        [
+            "git", "-C", str(dest),
+            "-c", "protocol.file.allow=always",
+            "submodule", "update", "--init", "--recursive",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    import shutil
     git_dir = dest / ".git"
     if git_dir.exists():
-        import shutil
         shutil.rmtree(git_dir)
+    for git_path in dest.rglob(".git"):
+        if git_path.is_file():
+            git_path.unlink()
+        elif git_path.is_dir():
+            shutil.rmtree(git_path)
     return dest
 
 

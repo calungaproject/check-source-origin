@@ -70,6 +70,24 @@ def _init_local_repo(path: Path, files: dict[str, str]) -> str:
     return result.stdout.strip()
 
 
+def _init_submodule_repo(parent: Path, submodule_path: str, sub_files: dict[str, str]) -> None:
+    """Add a git submodule to an existing repo."""
+    sub_origin = parent.parent / "sub_origin"
+    _init_local_repo(sub_origin, sub_files)
+    subprocess.run(
+        [
+            "git", "-C", str(parent),
+            "-c", "protocol.file.allow=always",
+            "submodule", "add", str(sub_origin), submodule_path,
+        ],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(parent), "commit", "-m", "add submodule"],
+        check=True, capture_output=True,
+    )
+
+
 class TestCloneRepo:
     def test_clone_by_tag(self, tmp_path: Path) -> None:
         origin = tmp_path / "origin"
@@ -92,6 +110,21 @@ class TestCloneRepo:
         result = clone_repo(str(origin), sha, dest)
         assert (result / "hello.txt").read_text() == "world"
         assert not (result / ".git").exists()
+
+    def test_clone_initializes_submodules(self, tmp_path: Path) -> None:
+        origin = tmp_path / "origin"
+        _init_local_repo(origin, {"hello.txt": "world"})
+        _init_submodule_repo(origin, "libs/sub", {"lib.txt": "content"})
+        subprocess.run(
+            ["git", "-C", str(origin), "tag", "v2.0"],
+            check=True, capture_output=True,
+        )
+        dest = tmp_path / "clone"
+        result = clone_repo(str(origin), "v2.0", dest)
+        assert (result / "libs/sub/lib.txt").read_text() == "content"
+        assert not (result / ".git").exists()
+        assert not (result / "libs/sub/.git").exists()
+        assert (result / ".gitmodules").exists()
 
 
 class TestRunVerify:
