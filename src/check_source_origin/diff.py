@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import copy
 import fnmatch
 import hashlib
+import sys
 from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from .models import DiffReport, DiffResult, FileEntry
 
@@ -35,6 +42,26 @@ def is_generated(rel_path: str, extra_patterns: list[str] | None = None) -> bool
             if fnmatch.fnmatch(sub, pattern):
                 return True
     return False
+
+
+def _pyproject_only_version_changed(
+    sdist_root: Path, vcs_root: Path, rel_path: str
+) -> bool:
+    if not rel_path.endswith("pyproject.toml"):
+        return False
+    try:
+        with open(sdist_root / rel_path, "rb") as f:
+            sdist_data = tomllib.load(f)
+        with open(vcs_root / rel_path, "rb") as f:
+            vcs_data = tomllib.load(f)
+    except Exception:
+        return False
+
+    sdist_cmp = copy.deepcopy(sdist_data)
+    vcs_cmp = copy.deepcopy(vcs_data)
+    sdist_cmp.get("project", {}).pop("version", None)
+    vcs_cmp.get("project", {}).pop("version", None)
+    return sdist_cmp == vcs_cmp
 
 
 def _walk_files(root: Path) -> dict[str, str]:
@@ -76,6 +103,8 @@ def compare_trees(
         if sdist_files[path] == vcs_files[path]:
             continue
         if is_generated(path, extra_ignore):
+            generated.append(FileEntry(path=path, digest=sdist_files[path]))
+        elif _pyproject_only_version_changed(sdist_root, vcs_root, path):
             generated.append(FileEntry(path=path, digest=sdist_files[path]))
         else:
             modified.append(

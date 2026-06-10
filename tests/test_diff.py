@@ -115,6 +115,63 @@ class TestCompareTrees:
         assert len(report.generated) == 1
         assert report.generated[0].path == "setup.cfg"
 
+    def test_pyproject_version_only_change_is_generated(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "main.py", "x")
+        _write(
+            sdist / "pyproject.toml",
+            '[project]\nname = "pkg"\nversion = "1.2.3"\n',
+        )
+        _write(vcs / "main.py", "x")
+        _write(
+            vcs / "pyproject.toml",
+            '[project]\nname = "pkg"\nversion = "0.0.0"\n',
+        )
+        report = compare_trees(sdist, vcs)
+        assert report.passed is True
+        assert report.modified == []
+        assert any(g.path == "pyproject.toml" for g in report.generated)
+
+    def test_pyproject_version_and_other_change_stays_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "main.py", "x")
+        _write(
+            sdist / "pyproject.toml",
+            '[project]\nname = "evil"\nversion = "1.2.3"\n',
+        )
+        _write(vcs / "main.py", "x")
+        _write(
+            vcs / "pyproject.toml",
+            '[project]\nname = "pkg"\nversion = "0.0.0"\n',
+        )
+        report = compare_trees(sdist, vcs)
+        assert report.passed is False
+        assert any(m.path == "pyproject.toml" for m in report.modified)
+
+    def test_pyproject_no_version_in_either_stays_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "main.py", "x")
+        _write(sdist / "pyproject.toml", '[project]\nname = "evil"\n')
+        _write(vcs / "main.py", "x")
+        _write(vcs / "pyproject.toml", '[project]\nname = "pkg"\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is False
+        assert any(m.path == "pyproject.toml" for m in report.modified)
+
+    def test_pyproject_invalid_toml_stays_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "main.py", "x")
+        _write(sdist / "pyproject.toml", "not valid toml [[[")
+        _write(vcs / "main.py", "x")
+        _write(vcs / "pyproject.toml", '[project]\nname = "pkg"\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is False
+        assert any(m.path == "pyproject.toml" for m in report.modified)
+
     def test_extra_ignore_patterns(self, tmp_path: Path) -> None:
         sdist = tmp_path / "sdist"
         vcs = tmp_path / "vcs"
