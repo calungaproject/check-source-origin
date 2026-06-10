@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from .diff import compare_trees
+from .generated import detect_generated_files
 from .resolve import resolve_source
 from .verify import clone_repo, extract_sdist, fetch_sdist, run_verify
 
@@ -60,7 +61,9 @@ def diff(sdist: Path, repo: str, ref: str, use_json: bool, ignore: tuple[str, ..
         tmp = Path(tmpdir)
         sdist_root = extract_sdist(sdist, tmp / "sdist")
         repo_dir = clone_repo(repo, ref, tmp / "repo")
-        report = compare_trees(sdist_root, repo_dir, extra_ignore=list(ignore) or None)
+        auto_generated = detect_generated_files(repo_dir)
+        all_ignore = list(ignore) + auto_generated
+        report = compare_trees(sdist_root, repo_dir, extra_ignore=all_ignore or None)
 
     if use_json:
         click.echo(json.dumps(report.to_dict(), indent=2))

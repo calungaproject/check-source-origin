@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .diff import compare_trees
+from .generated import detect_generated_files
 from .download import download_sdist
 from .models import DiffReport, ResolveResult
 from .pypi import PyPIClient
@@ -97,6 +98,7 @@ def run_verify(
 
         sdist_root = extract_sdist(sdist_path, tmp / "sdist")
         repo_dir = clone_repo(resolved.repo_url, ref, tmp / "repo")
-        report = compare_trees(sdist_root, repo_dir)
+        auto_generated = detect_generated_files(repo_dir)
+        report = compare_trees(sdist_root, repo_dir, extra_ignore=auto_generated or None)
 
     return VerifyResult(resolve_result=resolved, diff_report=report)

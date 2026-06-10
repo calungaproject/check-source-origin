@@ -128,6 +128,35 @@ class TestCloneRepo:
 
 
 class TestRunVerify:
+    def test_generated_version_file_auto_detected(self, tmp_path: Path) -> None:
+        sdist = _make_sdist_tarball(
+            tmp_path,
+            {
+                "src/main.py": "print('hello')",
+                "src/pkg/_version.py": '__version__ = "1.0"',
+            },
+        )
+        repo = _make_git_repo(
+            tmp_path,
+            {
+                "src/main.py": "print('hello')",
+                "pyproject.toml": (
+                    "[tool.setuptools_scm]\n"
+                    'version_file = "src/pkg/_version.py"\n'
+                ),
+            },
+        )
+        with (
+            patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
+            patch("check_source_origin.verify.clone_repo", return_value=repo),
+        ):
+            result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
+
+        assert result.diff_report.passed is True
+        assert any(
+            "_version.py" in f.path for f in result.diff_report.generated
+        )
+
     def test_clean_match(self, tmp_path: Path) -> None:
         source_files = {"src/main.py": "print('hello')"}
         sdist = _make_sdist_tarball(tmp_path, source_files)
