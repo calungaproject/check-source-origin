@@ -102,6 +102,19 @@ class TestCompareTrees:
         assert "PKG-INFO" in gen_paths
         assert "mypackage.egg-info/SOURCES.txt" in gen_paths
 
+    def test_modified_generated_file_classified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "main.py", "x")
+        _write(sdist / "setup.cfg", "[metadata]\nversion = 1.0")
+        _write(vcs / "main.py", "x")
+        _write(vcs / "setup.cfg", "[metadata]")
+        report = compare_trees(sdist, vcs)
+        assert report.passed is True
+        assert report.modified == []
+        assert len(report.generated) == 1
+        assert report.generated[0].path == "setup.cfg"
+
     def test_extra_ignore_patterns(self, tmp_path: Path) -> None:
         sdist = tmp_path / "sdist"
         vcs = tmp_path / "vcs"

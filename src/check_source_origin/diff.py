@@ -71,15 +71,20 @@ def compare_trees(
         FileEntry(path=path, digest=vcs_files[path]) for path in sorted(vcs_only)
     ]
 
-    modified = [
-        DiffResult(
-            path=path,
-            sdist_digest=sdist_files[path],
-            vcs_digest=vcs_files[path],
-        )
-        for path in sorted(common)
-        if sdist_files[path] != vcs_files[path]
-    ]
+    modified: list[DiffResult] = []
+    for path in sorted(common):
+        if sdist_files[path] == vcs_files[path]:
+            continue
+        if is_generated(path, extra_ignore):
+            generated.append(FileEntry(path=path, digest=sdist_files[path]))
+        else:
+            modified.append(
+                DiffResult(
+                    path=path,
+                    sdist_digest=sdist_files[path],
+                    vcs_digest=vcs_files[path],
+                )
+            )
 
     return DiffReport(
         added=added,
