@@ -61,9 +61,12 @@ def resolve_source(name: str, version: str) -> ResolveResult:
     ]
     if source_repos:
         project = source_repos[0]
+        repo_url = _repo_url_from_project_id(project["projectKey"]["id"])
+        github = GitHubClient()
+        commit = github.resolve_version_commit(repo_url, version)
         return ResolveResult(
-            repo_url=_repo_url_from_project_id(project["projectKey"]["id"]),
-            commit=None,
+            repo_url=repo_url,
+            commit=commit,
             tag=None,
             resolution_method="related_project",
             verified=False,
@@ -72,9 +75,12 @@ def resolve_source(name: str, version: str) -> ResolveResult:
     pypi_data = pypi.get_version_metadata(name, version)
     source_urls = PyPIClient.extract_source_urls(pypi_data)
     if source_urls:
+        repo_url = source_urls[0]
+        github = GitHubClient()
+        commit = github.resolve_version_commit(repo_url, version)
         return ResolveResult(
-            repo_url=source_urls[0],
-            commit=None,
+            repo_url=repo_url,
+            commit=commit,
             tag=None,
             resolution_method="pypi_metadata",
             verified=False,

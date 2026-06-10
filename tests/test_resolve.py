@@ -116,6 +116,81 @@ class TestResolveSource:
         assert result.verified is True
         assert result.resolution_method == "attestation"
 
+    def test_related_project_resolves_commit(self) -> None:
+        """When using related_project fallback, resolve the commit via GitHub."""
+        github_ref_resp = httpx.Response(
+            200,
+            json={
+                "ref": "refs/tags/v2.31.0",
+                "object": {
+                    "sha": "aaaa",
+                    "type": "commit",
+                },
+            },
+            request=_FAKE_REQ,
+        )
+
+        def mock_get(url: str, **kwargs):
+            full = str(url)
+            if "/git/ref/tags/" in full:
+                return github_ref_resp
+            if "/systems/pypi/" in full:
+                data = _load_fixture("depsdev_requests_2.31.0.json")
+                return httpx.Response(200, json=data, request=_FAKE_REQ)
+            return httpx.Response(404, json={}, request=_FAKE_REQ)
+
+        with patch.object(httpx.Client, "get", side_effect=mock_get):
+            result = resolve_source("requests", "2.31.0")
+        assert result.resolution_method == "related_project"
+        assert result.commit == "aaaa"
+        assert result.verified is False
+
+    def test_pypi_metadata_resolves_commit(self) -> None:
+        """When using pypi_metadata fallback, resolve the commit via GitHub."""
+        empty_depsdev = {
+            "versionKey": {"system": "PYPI", "name": "x", "version": "0"},
+            "attestations": [],
+            "relatedProjects": [],
+            "links": [],
+        }
+        github_ref_resp = httpx.Response(
+            200,
+            json={
+                "ref": "refs/tags/v1.0.0",
+                "object": {
+                    "sha": "bbbb",
+                    "type": "commit",
+                },
+            },
+            request=_FAKE_REQ,
+        )
+        pypi_data = {
+            "info": {
+                "name": "somepkg",
+                "project_urls": {
+                    "Source": "https://github.com/owner/somepkg",
+                },
+                "home_page": None,
+            },
+            "urls": [],
+        }
+
+        def mock_get(url: str, **kwargs):
+            full = str(url)
+            if "/git/ref/tags/" in full:
+                return github_ref_resp
+            if "/systems/pypi/" in full:
+                return httpx.Response(200, json=empty_depsdev, request=_FAKE_REQ)
+            if "/pypi/" in full:
+                return httpx.Response(200, json=pypi_data, request=_FAKE_REQ)
+            return httpx.Response(404, json={}, request=_FAKE_REQ)
+
+        with patch.object(httpx.Client, "get", side_effect=mock_get):
+            result = resolve_source("somepkg", "1.0.0")
+        assert result.resolution_method == "pypi_metadata"
+        assert result.commit == "bbbb"
+        assert result.verified is False
+
     def test_raises_when_nothing_found(self) -> None:
         empty_depsdev = {
             "versionKey": {"system": "PYPI", "name": "x", "version": "0"},
