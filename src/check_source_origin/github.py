@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from typing import Any, NamedTuple
 
@@ -17,7 +18,13 @@ BASE_URL = "https://api.github.com"
 
 class GitHubClient:
     def __init__(self) -> None:
-        self._client = httpx.Client(base_url=BASE_URL, timeout=30)
+        headers: dict[str, str] = {}
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        self._client = httpx.Client(
+            base_url=BASE_URL, timeout=30, headers=headers
+        )
 
     def resolve_tag_commit(
         self, owner: str, repo: str, tag: str

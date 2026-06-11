@@ -57,6 +57,16 @@ The `diff` command accepts `--ignore <pattern>` (repeatable) to treat additional
 
 The `verify` command accepts `--sdist <path>` to skip the download step and use a pre-downloaded tarball.
 
+### GitHub authentication
+
+The tool uses the GitHub API to resolve tags and commits. Unauthenticated requests are limited to 60 per hour. To avoid rate-limit failures, set a GitHub token:
+
+```sh
+export GH_TOKEN=$(gh auth token)
+```
+
+The tool checks `GH_TOKEN` first, then `GITHUB_TOKEN`.
+
 ## How resolution works
 
 `check-source-origin resolve` maps a package version to its VCS repository using multiple strategies, in priority order:
