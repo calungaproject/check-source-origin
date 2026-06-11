@@ -110,6 +110,32 @@ class TestCloneRepo:
         assert (result / "hello.txt").read_text() == "world"
         assert not (result / ".git").exists()
 
+    def test_clone_fetches_tag_on_checkout_failure(self, tmp_path: Path) -> None:
+        origin = tmp_path / "origin"
+        files = {"hello.txt": "world"}
+        _init_local_repo(origin, files)
+        subprocess.run(
+            ["git", "-C", str(origin), "tag", "v1.0"],
+            check=True, capture_output=True,
+        )
+        dest = tmp_path / "clone"
+        original_run = subprocess.run
+
+        checkout_call_count = 0
+
+        def patched_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            nonlocal checkout_call_count
+            if cmd[0] == "git" and "checkout" in cmd:
+                checkout_call_count += 1
+                if checkout_call_count == 1:
+                    raise subprocess.CalledProcessError(1, cmd)
+            return original_run(cmd, **kwargs)
+
+        with patch("check_source_origin.verify.subprocess.run", side_effect=patched_run):
+            result = clone_repo(str(origin), "v1.0", dest)
+        assert (result / "hello.txt").read_text() == "world"
+        assert not (result / ".git").exists()
+
     def test_clone_initializes_submodules(self, tmp_path: Path) -> None:
         origin = tmp_path / "origin"
         _init_local_repo(origin, {"hello.txt": "world"})

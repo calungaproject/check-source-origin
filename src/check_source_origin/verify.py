@@ -35,11 +35,23 @@ def clone_repo(repo_url: str, ref: str, dest: Path) -> Path:
         check=True,
         capture_output=True,
     )
-    subprocess.run(
-        ["git", "-C", str(dest), "checkout", ref],
-        check=True,
-        capture_output=True,
-    )
+    try:
+        subprocess.run(
+            ["git", "-C", str(dest), "checkout", ref],
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError:
+        subprocess.run(
+            ["git", "-C", str(dest), "fetch", "origin", "tag", ref],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(dest), "checkout", ref],
+            check=True,
+            capture_output=True,
+        )
     subprocess.run(
         [
             "git", "-C", str(dest),
