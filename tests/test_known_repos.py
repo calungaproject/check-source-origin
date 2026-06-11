@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from check_source_origin.known_repos import KnownRepo, lookup
+from check_source_origin.known_repos import lookup
 
 
 class TestLookup:
