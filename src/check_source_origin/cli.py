@@ -31,7 +31,6 @@ def resolve(name: str, version: str, use_json: bool) -> None:
         click.echo(f"Commit:     {result.commit or '(unknown)'}")
         click.echo(f"Tag:        {result.tag or '(unknown)'}")
         click.echo(f"Method:     {result.resolution_method}")
-        click.echo(f"Verified:   {result.verified}")
 
 
 @main.command()
@@ -100,7 +99,6 @@ def verify(name: str, version: str, use_json: bool, sdist_path: Path | None, det
             click.echo(f"Repository: {r.repo_url}")
             click.echo(f"Commit:     {r.commit or '(unknown)'}")
             click.echo(f"Method:     {r.resolution_method}")
-            click.echo(f"Verified:   {r.verified}")
             click.echo()
             _print_diff_report(
                 result.diff_report, details=details, show_diff=show_diff,

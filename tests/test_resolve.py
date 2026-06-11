@@ -54,7 +54,6 @@ class TestResolveSource:
             }),
         ):
             result = resolve_source("flask", "3.1.1")
-        assert result.verified is True
         assert result.resolution_method == "attestation"
         assert "github.com" in result.repo_url
         assert result.commit is not None
@@ -69,7 +68,6 @@ class TestResolveSource:
             }),
         ):
             result = resolve_source("requests", "2.31.0")
-        assert result.verified is False
         assert result.resolution_method in ("related_project", "pypi_metadata")
         assert "github.com" in result.repo_url
 
@@ -113,7 +111,6 @@ class TestResolveSource:
             result = resolve_source("numpy", "2.4.6")
         assert result.repo_url == "https://github.com/numpy/numpy"
         assert result.commit == "b832a09cf2a169c833dd2371e7c07aa00b293242"
-        assert result.verified is True
         assert result.resolution_method == "attestation"
 
     def test_related_project_resolves_commit(self) -> None:
@@ -143,7 +140,6 @@ class TestResolveSource:
             result = resolve_source("requests", "2.31.0")
         assert result.resolution_method == "related_project"
         assert result.commit == "aaaa"
-        assert result.verified is False
 
     def test_pypi_metadata_resolves_commit(self) -> None:
         """When using pypi_metadata fallback, resolve the commit via GitHub."""
@@ -189,7 +185,6 @@ class TestResolveSource:
             result = resolve_source("somepkg", "1.0.0")
         assert result.resolution_method == "pypi_metadata"
         assert result.commit == "bbbb"
-        assert result.verified is False
 
     def test_known_repos_fallback(self) -> None:
         """When all methods fail but the package is in KNOWN_REPOS, use it."""
@@ -227,7 +222,6 @@ class TestResolveSource:
         assert result.resolution_method == "known_repos"
         assert result.repo_url == "https://github.com/fsspec/adlfs"
         assert result.commit == "cccc"
-        assert result.verified is False
 
     def test_known_repos_skipped_when_not_in_db(self) -> None:
         """Unknown packages still raise ResolveError."""

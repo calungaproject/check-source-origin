@@ -37,7 +37,6 @@ _RESOLVE = ResolveResult(
     commit="abc123",
     tag=None,
     resolution_method="attestation",
-    verified=True,
 )
 
 
@@ -168,7 +167,7 @@ class TestRunVerify:
             result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
 
         assert result.diff_report.passed is True
-        assert result.resolve_result.verified is True
+        assert result.resolve_result.resolution_method == "attestation"
 
     def test_tampered_file_detected(self, tmp_path: Path) -> None:
         sdist = _make_sdist_tarball(tmp_path, {"src/main.py": "evil()"})
@@ -228,5 +227,5 @@ class TestRunVerify:
         import json
         d = result.to_dict()
         json.dumps(d)
-        assert d["resolve"]["verified"] is True
+        assert "verified" not in d["resolve"]
         assert d["diff"]["passed"] is True

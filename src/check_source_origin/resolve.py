@@ -55,7 +55,6 @@ def resolve_source(name: str, version: str) -> ResolveResult:
             commit=commit,
             tag=None,
             resolution_method="attestation",
-            verified=True,
         )
 
     source_repos = [
@@ -71,7 +70,6 @@ def resolve_source(name: str, version: str) -> ResolveResult:
             commit=result.commit,
             tag=None,
             resolution_method="related_project",
-            verified=False,
         )
 
     pypi_data = pypi.get_version_metadata(name, version)
@@ -85,7 +83,6 @@ def resolve_source(name: str, version: str) -> ResolveResult:
             commit=result.commit,
             tag=None,
             resolution_method="pypi_metadata",
-            verified=False,
         )
 
     known_url = lookup_known_repo(name)
@@ -97,7 +94,6 @@ def resolve_source(name: str, version: str) -> ResolveResult:
             commit=result.commit,
             tag=None,
             resolution_method="known_repos",
-            verified=False,
         )
 
     raise ResolveError(

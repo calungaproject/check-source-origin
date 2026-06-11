@@ -58,7 +58,6 @@ class ResolveResult:
     commit: str | None
     tag: str | None
     resolution_method: str
-    verified: bool
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -66,5 +65,4 @@ class ResolveResult:
             "commit": self.commit,
             "tag": self.tag,
             "resolution_method": self.resolution_method,
-            "verified": self.verified,
         }

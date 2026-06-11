@@ -10,12 +10,10 @@ class TestResolveResult:
             commit="abc123",
             tag="3.0.0",
             resolution_method="attestation",
-            verified=True,
         )
         assert r.repo_url == "https://github.com/pallets/flask"
         assert r.commit == "abc123"
         assert r.tag == "3.0.0"
-        assert r.verified is True
 
     def test_to_dict(self) -> None:
         r = ResolveResult(
@@ -23,12 +21,10 @@ class TestResolveResult:
             commit="abc123",
             tag=None,
             resolution_method="pypi_metadata",
-            verified=False,
         )
         d = r.to_dict()
         assert d["repo_url"] == "https://github.com/pallets/flask"
         assert d["tag"] is None
-        assert d["verified"] is False
         json.dumps(d)
 
 
