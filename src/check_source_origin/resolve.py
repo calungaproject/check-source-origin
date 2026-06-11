@@ -50,6 +50,11 @@ def resolve_source(name: str, version: str) -> ResolveResult:
             result = github.resolve_version_commit(repo_url, version)
             commit, repo_url = result.commit, result.repo_url
 
+        if not commit:
+            raise ResolveError(
+                f"Found VCS source for {name}=={version} at {repo_url}, "
+                f"but could not resolve the commit"
+            )
         return ResolveResult(
             repo_url=repo_url,
             commit=commit,
@@ -65,6 +70,11 @@ def resolve_source(name: str, version: str) -> ResolveResult:
         repo_url = _repo_url_from_project_id(project["projectKey"]["id"])
         github = GitHubClient()
         result = github.resolve_version_commit(repo_url, version)
+        if not result.commit:
+            raise ResolveError(
+                f"Found VCS source for {name}=={version} at {result.repo_url}, "
+                f"but could not resolve the commit"
+            )
         return ResolveResult(
             repo_url=result.repo_url,
             commit=result.commit,
@@ -78,6 +88,11 @@ def resolve_source(name: str, version: str) -> ResolveResult:
         repo_url = source_urls[0]
         github = GitHubClient()
         result = github.resolve_version_commit(repo_url, version)
+        if not result.commit:
+            raise ResolveError(
+                f"Found VCS source for {name}=={version} at {result.repo_url}, "
+                f"but could not resolve the commit"
+            )
         return ResolveResult(
             repo_url=result.repo_url,
             commit=result.commit,
@@ -89,6 +104,11 @@ def resolve_source(name: str, version: str) -> ResolveResult:
     if known:
         github = GitHubClient()
         result = github.resolve_version_commit(known.url, version)
+        if not result.commit:
+            raise ResolveError(
+                f"Found VCS source for {name}=={version} at {result.repo_url}, "
+                f"but could not resolve the commit"
+            )
         return ResolveResult(
             repo_url=result.repo_url,
             commit=result.commit,

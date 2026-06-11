@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import httpx
 
-from check_source_origin.resolve import resolve_source
+from check_source_origin.resolve import ResolveError, resolve_source
 
 FIXTURES = Path(__file__).parent / "fixtures"
 _FAKE_REQ = httpx.Request("GET", "https://fake")
@@ -59,17 +59,29 @@ class TestResolveSource:
         assert result.commit is not None
 
     def test_unverified_metadata_fallback(self) -> None:
-        with patch.object(
-            httpx.Client,
-            "get",
-            side_effect=_mock_get({
-                "deps.dev": "depsdev_requests_2.31.0.json",
-                "pypi.org": "pypi_requests_2.31.0.json",
-            }),
-        ):
+        github_ref_resp = httpx.Response(
+            200,
+            json={
+                "ref": "refs/tags/v2.31.0",
+                "object": {"sha": "ffff", "type": "commit"},
+            },
+            request=_FAKE_REQ,
+        )
+        base = _mock_get({
+            "deps.dev": "depsdev_requests_2.31.0.json",
+            "pypi.org": "pypi_requests_2.31.0.json",
+        })
+
+        def mock_get(url: str, **kwargs):
+            if "/git/ref/tags/" in str(url):
+                return github_ref_resp
+            return base(url, **kwargs)
+
+        with patch.object(httpx.Client, "get", side_effect=mock_get):
             result = resolve_source("requests", "2.31.0")
         assert result.resolution_method in ("related_project", "pypi_metadata")
         assert "github.com" in result.repo_url
+        assert result.commit is not None
 
     def test_attestation_cross_references_metadata_source_repo(self) -> None:
         """When attestation sourceRepository differs from UNVERIFIED_METADATA
@@ -349,6 +361,33 @@ class TestResolveSource:
         assert result.commit == "dddd"
         assert result.repo_url == "https://github.com/new-owner/pkg"
         assert result.resolution_method == "related_project"
+
+    def test_raises_when_commit_not_resolved(self) -> None:
+        """Should raise when repo is found but no matching tag exists."""
+        depsdev_data = {
+            "versionKey": {"system": "PYPI", "name": "pkg", "version": "1.0.0"},
+            "attestations": [],
+            "relatedProjects": [
+                {
+                    "relationType": "SOURCE_REPO",
+                    "projectKey": {"id": "github.com/owner/pkg"},
+                }
+            ],
+            "links": [],
+        }
+
+        def mock_get(url: str, **kwargs):
+            full = str(url)
+            if "/systems/pypi/" in full:
+                return httpx.Response(200, json=depsdev_data, request=_FAKE_REQ)
+            return httpx.Response(404, json={}, request=_FAKE_REQ)
+
+        with patch.object(httpx.Client, "get", side_effect=mock_get):
+            try:
+                resolve_source("pkg", "1.0.0")
+                assert False, "Should have raised"
+            except ResolveError as e:
+                assert "commit" in str(e).lower()
 
     def test_raises_when_nothing_found(self) -> None:
         empty_depsdev = {
