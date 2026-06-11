@@ -186,3 +186,4 @@ class TestCLI:
         assert "--repo" in result.output
         assert "--ref" in result.output
         assert "--show-diff" in result.output
+        assert "--subdir" in result.output

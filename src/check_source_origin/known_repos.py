@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import re
+from typing import NamedTuple
 
-KNOWN_REPOS: dict[str, str] = {
+
+class KnownRepo(NamedTuple):
+    url: str
+    subdir: str | None = None
+
+
+KNOWN_REPOS: dict[str, str | KnownRepo] = {
     "adlfs": "https://github.com/fsspec/adlfs",
     "aliyun-python-sdk-kms": "https://github.com/aliyun/aliyun-openapi-python-sdk",
     "antlr4-python3-runtime": "https://github.com/antlr/antlr4",
     "arro3-core": "https://github.com/kylebarron/arro3",
-    "avro": "https://github.com/apache/avro",
+    "avro": KnownRepo("https://github.com/apache/avro", subdir="lang/py"),
     "coloredlogs": "https://github.com/xolox/python-coloredlogs",
     "contextlib2": "https://github.com/jazzband/contextlib2",
     "databricks-sdk": "https://github.com/databricks/databricks-sdk-py",
@@ -69,5 +76,10 @@ def _normalize(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def lookup(name: str) -> str | None:
-    return KNOWN_REPOS.get(_normalize(name))
+def lookup(name: str) -> KnownRepo | None:
+    entry = KNOWN_REPOS.get(_normalize(name))
+    if entry is None:
+        return None
+    if isinstance(entry, str):
+        return KnownRepo(url=entry)
+    return entry

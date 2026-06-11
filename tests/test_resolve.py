@@ -222,6 +222,46 @@ class TestResolveSource:
         assert result.resolution_method == "known_repos"
         assert result.repo_url == "https://github.com/fsspec/adlfs"
         assert result.commit == "cccc"
+        assert result.subdir is None
+
+    def test_known_repos_with_subdir(self) -> None:
+        """Mono-repo packages carry subdir through to ResolveResult."""
+        empty_depsdev = {
+            "versionKey": {"system": "PYPI", "name": "avro", "version": "1.12.1"},
+            "attestations": [],
+            "relatedProjects": [],
+            "links": [],
+        }
+        empty_pypi = {
+            "info": {"name": "avro", "project_urls": None, "home_page": None},
+            "urls": [],
+        }
+        github_ref_resp = httpx.Response(
+            200,
+            json={
+                "ref": "refs/tags/release-1.12.1",
+                "object": {"sha": "eeee", "type": "commit"},
+            },
+            request=_FAKE_REQ,
+        )
+
+        def mock_get(url: str, **kwargs):
+            full = str(url)
+            if "/git/ref/tags/" in full:
+                if "release-1.12.1" in full:
+                    return github_ref_resp
+                return httpx.Response(404, json={}, request=_FAKE_REQ)
+            if "/systems/pypi/" in full:
+                return httpx.Response(200, json=empty_depsdev, request=_FAKE_REQ)
+            if "/pypi/" in full:
+                return httpx.Response(200, json=empty_pypi, request=_FAKE_REQ)
+            return httpx.Response(404, json={}, request=_FAKE_REQ)
+
+        with patch.object(httpx.Client, "get", side_effect=mock_get):
+            result = resolve_source("avro", "1.12.1")
+        assert result.resolution_method == "known_repos"
+        assert result.repo_url == "https://github.com/apache/avro"
+        assert result.subdir == "lang/py"
 
     def test_known_repos_skipped_when_not_in_db(self) -> None:
         """Unknown packages still raise ResolveError."""

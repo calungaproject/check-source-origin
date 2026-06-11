@@ -30,6 +30,8 @@ def resolve(name: str, version: str, use_json: bool) -> None:
         click.echo(f"Repository: {result.repo_url}")
         click.echo(f"Commit:     {result.commit or '(unknown)'}")
         click.echo(f"Tag:        {result.tag or '(unknown)'}")
+        if result.subdir:
+            click.echo(f"Subdir:     {result.subdir}")
         click.echo(f"Method:     {result.resolution_method}")
 
 
@@ -53,7 +55,8 @@ def download(name: str, version: str, output: Path | None) -> None:
 @click.option("--ignore", multiple=True, help="Extra glob patterns to treat as generated")
 @click.option("--details", is_flag=True, help="Show excluded and generated files")
 @click.option("--show-diff", is_flag=True, help="Show actual file diffs for modified files")
-def diff(sdist: Path, repo: str, ref: str, use_json: bool, ignore: tuple[str, ...], details: bool, show_diff: bool) -> None:
+@click.option("--subdir", default=None, help="Subdirectory within the repo containing the Python package (for mono-repos)")
+def diff(sdist: Path, repo: str, ref: str, use_json: bool, ignore: tuple[str, ...], details: bool, show_diff: bool, subdir: str | None) -> None:
     """Compare an sdist tarball against a VCS checkout."""
     import tempfile
 
@@ -61,6 +64,8 @@ def diff(sdist: Path, repo: str, ref: str, use_json: bool, ignore: tuple[str, ..
         tmp = Path(tmpdir)
         sdist_root = extract_sdist(sdist, tmp / "sdist")
         repo_dir = clone_repo(repo, ref, tmp / "repo")
+        if subdir:
+            repo_dir = repo_dir / subdir
         auto_generated = detect_generated_files(repo_dir)
         all_ignore = list(ignore) + auto_generated
         report = compare_trees(sdist_root, repo_dir, extra_ignore=all_ignore or None)
@@ -98,6 +103,8 @@ def verify(name: str, version: str, use_json: bool, sdist_path: Path | None, det
             r = result.resolve_result
             click.echo(f"Repository: {r.repo_url}")
             click.echo(f"Commit:     {r.commit or '(unknown)'}")
+            if r.subdir:
+                click.echo(f"Subdir:     {r.subdir}")
             click.echo(f"Method:     {r.resolution_method}")
             click.echo()
             _print_diff_report(

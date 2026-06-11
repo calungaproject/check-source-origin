@@ -90,3 +90,28 @@ class TestResolveRedirect:
         with patch.object(httpx.Client, "get", return_value=resp):
             with pytest.raises(httpx.HTTPStatusError):
                 client._resolve_redirect("owner", "repo")
+
+
+class TestResolveVersionCommit:
+    def test_finds_release_prefixed_tag(self) -> None:
+        """Repos like apache/avro use 'release-X.Y.Z' tags."""
+        not_found = httpx.Response(404, json={}, request=_FAKE_REQ)
+        found = httpx.Response(
+            200,
+            json={"object": {"type": "commit", "sha": "abc123"}},
+            request=_FAKE_REQ,
+        )
+
+        def side_effect(url: str, **kwargs: object) -> httpx.Response:
+            if url.endswith("/tags/release-1.12.1"):
+                return found
+            return not_found
+
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", side_effect=side_effect):
+            result = client.resolve_version_commit(
+                "https://github.com/apache/avro", "1.12.1"
+            )
+        assert result.commit == "abc123"
+        assert result.repo_url == "https://github.com/apache/avro"

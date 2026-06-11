@@ -58,11 +58,15 @@ class ResolveResult:
     commit: str | None
     tag: str | None
     resolution_method: str
+    subdir: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "repo_url": self.repo_url,
             "commit": self.commit,
             "tag": self.tag,
             "resolution_method": self.resolution_method,
         }
+        if self.subdir is not None:
+            d["subdir"] = self.subdir
+        return d

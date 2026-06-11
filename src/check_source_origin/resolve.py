@@ -85,15 +85,16 @@ def resolve_source(name: str, version: str) -> ResolveResult:
             resolution_method="pypi_metadata",
         )
 
-    known_url = lookup_known_repo(name)
-    if known_url:
+    known = lookup_known_repo(name)
+    if known:
         github = GitHubClient()
-        result = github.resolve_version_commit(known_url, version)
+        result = github.resolve_version_commit(known.url, version)
         return ResolveResult(
             repo_url=result.repo_url,
             commit=result.commit,
             tag=None,
             resolution_method="known_repos",
+            subdir=known.subdir,
         )
 
     raise ResolveError(

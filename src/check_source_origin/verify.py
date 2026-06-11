@@ -126,10 +126,11 @@ def _do_verify(
 
     sdist_root = extract_sdist(sdist_path, tmp / "sdist")
     repo_dir = clone_repo(resolved.repo_url, ref, tmp / "repo")
-    auto_generated = detect_generated_files(repo_dir)
-    report = compare_trees(sdist_root, repo_dir, extra_ignore=auto_generated or None)
+    vcs_root = repo_dir / resolved.subdir if resolved.subdir else repo_dir
+    auto_generated = detect_generated_files(vcs_root)
+    report = compare_trees(sdist_root, vcs_root, extra_ignore=auto_generated or None)
 
     return VerifyResult(
         resolve_result=resolved, diff_report=report,
-        sdist_root=sdist_root, vcs_root=repo_dir,
+        sdist_root=sdist_root, vcs_root=vcs_root,
     )

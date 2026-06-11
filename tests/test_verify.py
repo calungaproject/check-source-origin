@@ -240,6 +240,31 @@ class TestRunVerify:
         assert result.vcs_root.exists()
         assert result.diff_report.passed is True
 
+    def test_monorepo_subdir_narrows_comparison(self, tmp_path: Path) -> None:
+        """When ResolveResult has a subdir, only that subtree is compared."""
+        resolve_with_subdir = ResolveResult(
+            repo_url="https://github.com/apache/avro",
+            commit="abc123",
+            tag=None,
+            resolution_method="known_repos",
+            subdir="lang/py",
+        )
+        sdist = _make_sdist_tarball(tmp_path, {"avro/__init__.py": "# avro"})
+        repo = _make_git_repo(
+            tmp_path,
+            {
+                "lang/py/avro/__init__.py": "# avro",
+                "lang/java/pom.xml": "<project/>",
+            },
+        )
+        with (
+            patch("check_source_origin.verify.resolve_source", return_value=resolve_with_subdir),
+            patch("check_source_origin.verify.clone_repo", return_value=repo),
+        ):
+            result = run_verify("avro", "1.12.1", tmp_path, sdist_path=sdist)
+
+        assert result.diff_report.passed is True
+
     def test_to_dict_serializable(self, tmp_path: Path) -> None:
         source_files = {"main.py": "x"}
         sdist = _make_sdist_tarball(tmp_path, source_files)
