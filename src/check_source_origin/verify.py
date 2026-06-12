@@ -7,9 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dataclasses import replace
+
 from .diff import compare_trees
 from .generated import detect_generated_files
 from .download import download_sdist
+from .known_repos import normalize
 from .models import DiffReport, ResolveResult
 from .pypi import PyPIClient
 from .resolve import resolve_source
@@ -27,6 +30,18 @@ class VerifyResult:
             "resolve": self.resolve_result.to_dict(),
             "diff": self.diff_report.to_dict(),
         }
+
+
+def find_package_subdir(repo_dir: Path, name: str) -> str | None:
+    target = normalize(name)
+    for pattern in ("setup.py", "pyproject.toml"):
+        for path in repo_dir.rglob(pattern):
+            parent = path.parent
+            if parent == repo_dir:
+                continue
+            if normalize(parent.name) == target:
+                return str(parent.relative_to(repo_dir))
+    return None
 
 
 def clone_repo(repo_url: str, ref: str, dest: Path) -> Path:
@@ -126,6 +141,10 @@ def _do_verify(
 
     sdist_root = extract_sdist(sdist_path, tmp / "sdist")
     repo_dir = clone_repo(resolved.repo_url, ref, tmp / "repo")
+    if not resolved.subdir:
+        detected = find_package_subdir(repo_dir, name)
+        if detected:
+            resolved = replace(resolved, subdir=detected)
     vcs_root = repo_dir / resolved.subdir if resolved.subdir else repo_dir
     auto_generated = detect_generated_files(vcs_root)
     report = compare_trees(sdist_root, vcs_root, extra_ignore=auto_generated or None)

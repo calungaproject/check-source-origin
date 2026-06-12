@@ -72,12 +72,12 @@ KNOWN_REPOS: dict[str, str | KnownRepo] = {
 }
 
 
-def _normalize(name: str) -> str:
+def normalize(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def lookup(name: str) -> KnownRepo | None:
-    entry = KNOWN_REPOS.get(_normalize(name))
+    entry = KNOWN_REPOS.get(normalize(name))
     if entry is None:
         return None
     if isinstance(entry, str):

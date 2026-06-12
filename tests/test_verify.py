@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from check_source_origin.models import ResolveResult
-from check_source_origin.verify import clone_repo, run_verify
+from check_source_origin.verify import clone_repo, find_package_subdir, run_verify
 
 
 def _make_sdist_tarball(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -85,6 +85,46 @@ def _init_submodule_repo(parent: Path, submodule_path: str, sub_files: dict[str,
         ["git", "-C", str(parent), "commit", "-m", "add submodule"],
         check=True, capture_output=True,
     )
+
+
+class TestFindPackageSubdir:
+    def test_finds_nested_setup_py(self, tmp_path: Path) -> None:
+        repo = _make_git_repo(
+            tmp_path,
+            {
+                "sdk/synapse/azure-synapse-artifacts/setup.py": "setup()",
+                "sdk/storage/azure-storage-blob/setup.py": "setup()",
+            },
+        )
+        assert find_package_subdir(repo, "azure-synapse-artifacts") == "sdk/synapse/azure-synapse-artifacts"
+
+    def test_finds_pyproject_toml(self, tmp_path: Path) -> None:
+        repo = _make_git_repo(
+            tmp_path,
+            {"sub/my-pkg/pyproject.toml": "[project]"},
+        )
+        assert find_package_subdir(repo, "my-pkg") == "sub/my-pkg"
+
+    def test_returns_none_when_no_match(self, tmp_path: Path) -> None:
+        repo = _make_git_repo(
+            tmp_path,
+            {"setup.py": "setup()", "other-pkg/setup.py": "setup()"},
+        )
+        assert find_package_subdir(repo, "nonexistent-pkg") is None
+
+    def test_skips_root_setup_py(self, tmp_path: Path) -> None:
+        repo = _make_git_repo(
+            tmp_path,
+            {"setup.py": "setup()"},
+        )
+        assert find_package_subdir(repo, "some-pkg") is None
+
+    def test_normalizes_name(self, tmp_path: Path) -> None:
+        repo = _make_git_repo(
+            tmp_path,
+            {"libs/my_pkg/setup.py": "setup()"},
+        )
+        assert find_package_subdir(repo, "my-pkg") == "libs/my_pkg"
 
 
 class TestCloneRepo:
@@ -263,6 +303,29 @@ class TestRunVerify:
         ):
             result = run_verify("avro", "1.12.1", tmp_path, sdist_path=sdist)
 
+        assert result.diff_report.passed is True
+
+    def test_monorepo_subdir_auto_detected(self, tmp_path: Path) -> None:
+        """When subdir is not set, auto-detect it from the cloned repo."""
+        sdist = _make_sdist_tarball(
+            tmp_path,
+            {"azure/synapse/artifacts/__init__.py": "# artifacts"},
+        )
+        repo = _make_git_repo(
+            tmp_path,
+            {
+                "sdk/synapse/azure-synapse-artifacts/setup.py": "setup()",
+                "sdk/synapse/azure-synapse-artifacts/azure/synapse/artifacts/__init__.py": "# artifacts",
+                "sdk/storage/azure-storage-blob/setup.py": "setup()",
+            },
+        )
+        with (
+            patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
+            patch("check_source_origin.verify.clone_repo", return_value=repo),
+        ):
+            result = run_verify("azure-synapse-artifacts", "1.0", tmp_path, sdist_path=sdist)
+
+        assert result.resolve_result.subdir == "sdk/synapse/azure-synapse-artifacts"
         assert result.diff_report.passed is True
 
     def test_to_dict_serializable(self, tmp_path: Path) -> None:
