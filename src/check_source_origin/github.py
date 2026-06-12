@@ -73,14 +73,17 @@ class GitHubClient:
         new_owner, new_repo = full_name.split("/", 1)
         return new_owner, new_repo
 
+    def _version_tags(self, name: str, version: str) -> tuple[str, ...]:
+        return (f"v{version}", version, f"release-{version}", f"{name}_{version}")
+
     def resolve_version_commit(
-        self, repo_url: str, version: str
+        self, repo_url: str, version: str, name: str
     ) -> VersionCommitResult:
         match = _GITHUB_REPO_RE.match(repo_url)
         if not match:
             return VersionCommitResult(None, repo_url)
         owner, repo = match.group(1), match.group(2)
-        for tag in (f"v{version}", version, f"release-{version}"):
+        for tag in self._version_tags(name, version):
             commit = self.resolve_tag_commit(owner, repo, tag)
             if commit:
                 return VersionCommitResult(commit, repo_url)
@@ -89,7 +92,7 @@ class GitHubClient:
         if redirected:
             new_owner, new_repo = redirected
             new_url = f"https://github.com/{new_owner}/{new_repo}"
-            for tag in (f"v{version}", version, f"release-{version}"):
+            for tag in self._version_tags(name, version):
                 commit = self.resolve_tag_commit(new_owner, new_repo, tag)
                 if commit:
                     return VersionCommitResult(commit, new_url)

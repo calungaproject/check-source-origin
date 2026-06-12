@@ -111,7 +111,51 @@ class TestResolveVersionCommit:
             client = GitHubClient()
         with patch.object(httpx.Client, "get", side_effect=side_effect):
             result = client.resolve_version_commit(
-                "https://github.com/apache/avro", "1.12.1"
+                "https://github.com/apache/avro", "1.12.1", "avro"
             )
         assert result.commit == "abc123"
         assert result.repo_url == "https://github.com/apache/avro"
+
+    def test_finds_name_prefixed_tag(self) -> None:
+        """Monorepos like azure-sdk-for-python use '{name}_{version}' tags."""
+        not_found = httpx.Response(404, json={}, request=_FAKE_REQ)
+        found = httpx.Response(
+            200,
+            json={"object": {"type": "commit", "sha": "def456"}},
+            request=_FAKE_REQ,
+        )
+
+        def side_effect(url: str, **kwargs: object) -> httpx.Response:
+            if url.endswith("/tags/azure-synapse-artifacts_0.22.0"):
+                return found
+            return not_found
+
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", side_effect=side_effect):
+            result = client.resolve_version_commit(
+                "https://github.com/Azure/azure-sdk-for-python",
+                "0.22.0",
+                name="azure-synapse-artifacts",
+            )
+        assert result.commit == "def456"
+        assert result.repo_url == "https://github.com/Azure/azure-sdk-for-python"
+
+    def test_name_prefixed_tag_tried_after_generic(self) -> None:
+        """The name-prefixed tag is tried after v{version}, {version}, release-{version}."""
+        not_found = httpx.Response(404, json={}, request=_FAKE_REQ)
+        tried: list[str] = []
+
+        def side_effect(url: str, **kwargs: object) -> httpx.Response:
+            if "/tags/" in str(url):
+                tried.append(str(url).rsplit("/tags/", 1)[1])
+            return not_found
+
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", side_effect=side_effect):
+            result = client.resolve_version_commit(
+                "https://github.com/owner/repo", "1.0.0", "mypkg"
+            )
+        assert result.commit is None
+        assert tried == ["v1.0.0", "1.0.0", "release-1.0.0", "mypkg_1.0.0"]

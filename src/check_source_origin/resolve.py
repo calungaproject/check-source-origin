@@ -47,7 +47,7 @@ def resolve_source(name: str, version: str) -> ResolveResult:
         if metadata_repo and metadata_repo != repo_url:
             repo_url = metadata_repo
             github = GitHubClient()
-            result = github.resolve_version_commit(repo_url, version)
+            result = github.resolve_version_commit(repo_url, version, name)
             commit, repo_url = result.commit, result.repo_url
 
         if not commit:
@@ -69,7 +69,7 @@ def resolve_source(name: str, version: str) -> ResolveResult:
         project = source_repos[0]
         repo_url = _repo_url_from_project_id(project["projectKey"]["id"])
         github = GitHubClient()
-        result = github.resolve_version_commit(repo_url, version)
+        result = github.resolve_version_commit(repo_url, version, name)
         if not result.commit:
             raise ResolveError(
                 f"Found VCS source for {name}=={version} at {result.repo_url}, "
@@ -87,7 +87,7 @@ def resolve_source(name: str, version: str) -> ResolveResult:
     if source_urls:
         repo_url = source_urls[0]
         github = GitHubClient()
-        result = github.resolve_version_commit(repo_url, version)
+        result = github.resolve_version_commit(repo_url, version, name)
         if not result.commit:
             raise ResolveError(
                 f"Found VCS source for {name}=={version} at {result.repo_url}, "
@@ -103,7 +103,7 @@ def resolve_source(name: str, version: str) -> ResolveResult:
     known = lookup_known_repo(name)
     if known:
         github = GitHubClient()
-        result = github.resolve_version_commit(known.url, version)
+        result = github.resolve_version_commit(known.url, version, name)
         if not result.commit:
             raise ResolveError(
                 f"Found VCS source for {name}=={version} at {result.repo_url}, "
