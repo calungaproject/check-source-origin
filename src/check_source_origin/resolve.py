@@ -45,10 +45,11 @@ def resolve_source(name: str, version: str) -> ResolveResult:
 
         metadata_repo = _find_metadata_source_repo(related)
         if metadata_repo and metadata_repo != repo_url:
-            repo_url = metadata_repo
             github = GitHubClient()
-            result = github.resolve_version_commit(repo_url, version, name)
-            commit, repo_url = result.commit, result.repo_url
+            result = github.resolve_version_commit(metadata_repo, version, name)
+            if result.commit:
+                repo_url = result.repo_url
+                commit = result.commit
 
         if not commit:
             raise ResolveError(

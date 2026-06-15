@@ -125,6 +125,46 @@ class TestResolveSource:
         assert result.commit == "b832a09cf2a169c833dd2371e7c07aa00b293242"
         assert result.resolution_method == "attestation"
 
+    def test_attestation_kept_when_metadata_repo_unresolvable(self) -> None:
+        """When the metadata source repo doesn't resolve (e.g. a sponsors page),
+        keep the attestation's repo and commit."""
+        depsdev_data = {
+            "versionKey": {"system": "PYPI", "name": "hatch", "version": "1.16.5"},
+            "attestations": [
+                {
+                    "type": "https://docs.pypi.org/attestations/publish/v1",
+                    "verified": True,
+                    "sourceRepository": "https://github.com/pypa/hatch",
+                    "commit": "b998d2b755bc0dca20054f96da8981532444fc2a",
+                }
+            ],
+            "relatedProjects": [
+                {
+                    "projectKey": {"id": "github.com/sponsors/ofek"},
+                    "relationProvenance": "UNVERIFIED_METADATA",
+                    "relationType": "SOURCE_REPO",
+                },
+                {
+                    "projectKey": {"id": "github.com/pypa/hatch"},
+                    "relationProvenance": "PYPI_PUBLISH_ATTESTATION",
+                    "relationType": "SOURCE_REPO",
+                },
+            ],
+            "links": [],
+        }
+
+        def mock_get(url: str, **kwargs):
+            full = str(url)
+            if "/systems/pypi/" in full:
+                return httpx.Response(200, json=depsdev_data, request=_FAKE_REQ)
+            return httpx.Response(404, json={}, request=_FAKE_REQ)
+
+        with patch.object(httpx.Client, "get", side_effect=mock_get):
+            result = resolve_source("hatch", "1.16.5")
+        assert result.repo_url == "https://github.com/pypa/hatch"
+        assert result.commit == "b998d2b755bc0dca20054f96da8981532444fc2a"
+        assert result.resolution_method == "attestation"
+
     def test_related_project_resolves_commit(self) -> None:
         """When using related_project fallback, resolve the commit via GitHub."""
         github_ref_resp = httpx.Response(
