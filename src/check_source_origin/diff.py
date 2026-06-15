@@ -20,6 +20,7 @@ GENERATED_PATTERNS: list[str] = [
     "*.dist-info/*",
     "*.dist-info",
     "setup.cfg",
+    ".gitignore",
 ]
 
 

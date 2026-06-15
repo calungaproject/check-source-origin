@@ -47,6 +47,9 @@ class TestIsGenerated:
     def test_setup_cfg(self) -> None:
         assert is_generated("setup.cfg") is True
 
+    def test_gitignore(self) -> None:
+        assert is_generated(".gitignore") is True
+
     def test_nested_source(self) -> None:
         assert is_generated("src/mypackage/utils.py") is False
 
