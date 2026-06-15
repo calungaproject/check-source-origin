@@ -11,7 +11,7 @@ from .generated import detect_generated_files
 from .resolve import ResolveError, resolve_source
 from .download import download_sdist
 from .pypi import PyPIClient
-from .verify import clone_repo, extract_sdist, run_verify
+from .verify import extract_sdist, fetch_repo, run_verify
 
 
 class _CLI(click.Group):
@@ -83,7 +83,7 @@ def diff(sdist: Path, repo: str, ref: str, use_json: bool, ignore: tuple[str, ..
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         sdist_root = extract_sdist(sdist, tmp / "sdist")
-        repo_dir = clone_repo(repo, ref, tmp / "repo")
+        repo_dir = fetch_repo(repo, ref, tmp / "repo")
         if subdir:
             repo_dir = repo_dir / subdir
         auto_generated = detect_generated_files(repo_dir)

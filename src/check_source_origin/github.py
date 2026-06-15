@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import re
+import tarfile
+from pathlib import Path
 from typing import Any, NamedTuple
 
 import httpx
@@ -72,6 +74,44 @@ class GitHubClient:
             return None
         new_owner, new_repo = full_name.split("/", 1)
         return new_owner, new_repo
+
+    def has_file(
+        self, owner: str, repo: str, path: str, ref: str
+    ) -> bool:
+        resp = self._client.get(
+            f"/repos/{owner}/{repo}/contents/{path}",
+            params={"ref": ref},
+        )
+        if resp.status_code == 404:
+            return False
+        resp.raise_for_status()
+        return True
+
+    def download_tarball(
+        self, owner: str, repo: str, ref: str, dest: Path
+    ) -> Path:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tarball = dest.parent / f"{repo}-{ref}.tar.gz"
+        try:
+            with self._client.stream(
+                "GET",
+                f"/repos/{owner}/{repo}/tarball/{ref}",
+                follow_redirects=True,
+            ) as resp:
+                resp.raise_for_status()
+                with open(tarball, "wb") as f:
+                    for chunk in resp.iter_bytes():
+                        f.write(chunk)
+            with tarfile.open(tarball, "r:gz") as tar:
+                tar.extractall(dest, filter="data")
+            children = list(dest.iterdir())
+            if len(children) == 1 and children[0].is_dir():
+                children[0].rename(dest.parent / "__unwrap__")
+                dest.rmdir()
+                (dest.parent / "__unwrap__").rename(dest)
+        finally:
+            tarball.unlink(missing_ok=True)
+        return dest
 
     def _version_tags(self, name: str, version: str) -> tuple[str, ...]:
         return (f"v{version}", version, f"release-{version}", f"{name}_{version}")

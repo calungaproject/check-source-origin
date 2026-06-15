@@ -1,3 +1,6 @@
+import tarfile
+from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -159,3 +162,71 @@ class TestResolveVersionCommit:
             )
         assert result.commit is None
         assert tried == ["v1.0.0", "1.0.0", "release-1.0.0", "mypkg_1.0.0"]
+
+
+class TestHasFile:
+    def test_returns_true_on_200(self) -> None:
+        resp = httpx.Response(200, json={"type": "file"}, request=_FAKE_REQ)
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", return_value=resp):
+            assert client.has_file("owner", "repo", ".gitmodules", "abc123") is True
+
+    def test_returns_false_on_404(self) -> None:
+        resp = httpx.Response(404, json={}, request=_FAKE_REQ)
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", return_value=resp):
+            assert client.has_file("owner", "repo", ".gitmodules", "abc123") is False
+
+    def test_raises_on_403(self) -> None:
+        resp = httpx.Response(403, json={"message": "forbidden"}, request=_FAKE_REQ)
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", return_value=resp):
+            with pytest.raises(httpx.HTTPStatusError):
+                client.has_file("owner", "repo", ".gitmodules", "abc123")
+
+
+def _make_tarball_bytes(files: dict[str, str], prefix: str = "owner-repo-abc123") -> bytes:
+    buf = BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for rel_path, content in files.items():
+            full = f"{prefix}/{rel_path}"
+            data = content.encode()
+            info = tarfile.TarInfo(name=full)
+            info.size = len(data)
+            tar.addfile(info, BytesIO(data))
+    return buf.getvalue()
+
+
+class TestDownloadTarball:
+    def test_extracts_and_unwraps(self, tmp_path: Path) -> None:
+        tarball_bytes = _make_tarball_bytes({"hello.txt": "world", "src/main.py": "print(1)"})
+
+        class FakeStream:
+            def __init__(self) -> None:
+                self.status_code = 200
+
+            def raise_for_status(self) -> None:
+                pass
+
+            def iter_bytes(self) -> list[bytes]:
+                return [tarball_bytes]
+
+            def __enter__(self) -> "FakeStream":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                pass
+
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "stream", return_value=FakeStream()):
+            dest = tmp_path / "repo"
+            result = client.download_tarball("owner", "repo", "abc123", dest)
+
+        assert result == dest
+        assert (dest / "hello.txt").read_text() == "world"
+        assert (dest / "src/main.py").read_text() == "print(1)"
+        assert not any(tmp_path.glob("*.tar.gz"))

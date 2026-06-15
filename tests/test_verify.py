@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from check_source_origin.models import ResolveResult
-from check_source_origin.verify import clone_repo, extract_sdist, find_package_subdir, run_verify
+from check_source_origin.verify import clone_repo, extract_sdist, fetch_repo, find_package_subdir, run_verify
 
 
 def _make_sdist_tarball(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -203,6 +203,53 @@ class TestCloneRepo:
         assert (result / ".gitmodules").exists()
 
 
+class TestFetchRepo:
+    def test_github_url_without_submodules_uses_tarball(self, tmp_path: Path) -> None:
+        dest = tmp_path / "repo"
+        expected = tmp_path / "result"
+        with (
+            patch("check_source_origin.verify.GitHubClient") as mock_cls,
+            patch("check_source_origin.verify.clone_repo") as mock_clone,
+        ):
+            mock_gh = mock_cls.return_value
+            mock_gh.has_file.return_value = False
+            mock_gh.download_tarball.return_value = expected
+            result = fetch_repo("https://github.com/owner/repo", "abc123", dest)
+
+        mock_gh.has_file.assert_called_once_with("owner", "repo", ".gitmodules", "abc123")
+        mock_gh.download_tarball.assert_called_once_with("owner", "repo", "abc123", dest)
+        mock_clone.assert_not_called()
+        assert result == expected
+
+    def test_github_url_with_submodules_falls_back_to_clone(self, tmp_path: Path) -> None:
+        dest = tmp_path / "repo"
+        expected = tmp_path / "result"
+        with (
+            patch("check_source_origin.verify.GitHubClient") as mock_cls,
+            patch("check_source_origin.verify.clone_repo", return_value=expected) as mock_clone,
+        ):
+            mock_gh = mock_cls.return_value
+            mock_gh.has_file.return_value = True
+            result = fetch_repo("https://github.com/owner/repo", "abc123", dest)
+
+        mock_gh.download_tarball.assert_not_called()
+        mock_clone.assert_called_once_with("https://github.com/owner/repo", "abc123", dest)
+        assert result == expected
+
+    def test_non_github_url_uses_clone(self, tmp_path: Path) -> None:
+        dest = tmp_path / "repo"
+        expected = tmp_path / "result"
+        with (
+            patch("check_source_origin.verify.GitHubClient") as mock_cls,
+            patch("check_source_origin.verify.clone_repo", return_value=expected) as mock_clone,
+        ):
+            result = fetch_repo("https://gitlab.com/owner/repo", "abc123", dest)
+
+        mock_cls.assert_not_called()
+        mock_clone.assert_called_once_with("https://gitlab.com/owner/repo", "abc123", dest)
+        assert result == expected
+
+
 class TestExtractSdist:
     def test_extracts_tarball(self, tmp_path: Path) -> None:
         sdist = _make_sdist_tarball(tmp_path, {"hello.py": "print('hi')"})
@@ -228,7 +275,7 @@ class TestRunVerifyWithZip:
         repo = _make_git_repo(tmp_path, source_files)
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
 
@@ -239,7 +286,7 @@ class TestRunVerifyWithZip:
         repo = _make_git_repo(tmp_path, {"src/main.py": "clean()"})
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
 
@@ -268,7 +315,7 @@ class TestRunVerify:
         )
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
 
@@ -283,7 +330,7 @@ class TestRunVerify:
         repo = _make_git_repo(tmp_path, source_files)
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
 
@@ -295,7 +342,7 @@ class TestRunVerify:
         repo = _make_git_repo(tmp_path, {"src/main.py": "clean()"})
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
 
@@ -310,7 +357,7 @@ class TestRunVerify:
         repo = _make_git_repo(tmp_path, {"src/main.py": "x"})
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
 
@@ -325,7 +372,7 @@ class TestRunVerify:
         work.mkdir()
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("pkg", "1.0", sdist_path=sdist, tmp_dir=work)
 
@@ -354,7 +401,7 @@ class TestRunVerify:
         )
         with (
             patch("check_source_origin.verify.resolve_source", return_value=resolve_with_subdir),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("avro", "1.12.1", tmp_path, sdist_path=sdist)
 
@@ -376,7 +423,7 @@ class TestRunVerify:
         )
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("azure-synapse-artifacts", "1.0", tmp_path, sdist_path=sdist)
 
@@ -389,7 +436,7 @@ class TestRunVerify:
         repo = _make_git_repo(tmp_path, source_files)
         with (
             patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
-            patch("check_source_origin.verify.clone_repo", return_value=repo),
+            patch("check_source_origin.verify.fetch_repo", return_value=repo),
         ):
             result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
 

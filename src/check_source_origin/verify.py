@@ -13,6 +13,7 @@ from dataclasses import replace
 from .diff import compare_trees
 from .generated import detect_generated_files
 from .download import download_sdist
+from .github import GitHubClient, _GITHUB_REPO_RE
 from .known_repos import normalize
 from .models import DiffReport, ResolveResult
 from .pypi import PyPIClient
@@ -89,6 +90,16 @@ def clone_repo(repo_url: str, ref: str, dest: Path) -> Path:
     return dest
 
 
+def fetch_repo(repo_url: str, ref: str, dest: Path) -> Path:
+    match = _GITHUB_REPO_RE.match(repo_url)
+    if match:
+        owner, repo = match.group(1), match.group(2)
+        gh = GitHubClient()
+        if not gh.has_file(owner, repo, ".gitmodules", ref):
+            return gh.download_tarball(owner, repo, ref, dest)
+    return clone_repo(repo_url, ref, dest)
+
+
 def extract_sdist(archive: Path, dest: Path) -> Path:
     if archive.suffix == ".zip":
         with zipfile.ZipFile(archive, "r") as zf:
@@ -146,7 +157,7 @@ def _do_verify(
         sdist_path = fetch_sdist(name, version, tmp)
 
     sdist_root = extract_sdist(sdist_path, tmp / "sdist")
-    repo_dir = clone_repo(resolved.repo_url, ref, tmp / "repo")
+    repo_dir = fetch_repo(resolved.repo_url, ref, tmp / "repo")
     if not resolved.subdir:
         detected = find_package_subdir(repo_dir, name)
         if detected:
