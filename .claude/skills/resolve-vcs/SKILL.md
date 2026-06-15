@@ -61,6 +61,27 @@ Also check `info.project_urls` keys — sometimes the repo is under an unusual
 label like `Code`, `Source Code`, `Development`, or `Homepage` rather than the
 expected `Source` or `Repository`.
 
+#### 2c. Check if the repo has moved
+
+The resolved repo URL may point to an archived repository whose source has
+moved elsewhere (e.g., absorbed into a monorepo) without a GitHub redirect.
+Check for this:
+
+1. **Check if the repo is archived** — look at the `archived` field:
+   ```
+   curl -s "https://api.github.com/repos/<OWNER>/<REPO>" | jq '.archived, .description'
+   ```
+2. **Read the README** — archived repos often document the move:
+   ```
+   curl -s "https://api.github.com/repos/<OWNER>/<REPO>/readme" | jq -r '.content' | base64 -d
+   ```
+   Look for phrases like "moved to", "migrated to", "this repository is
+   archived", or links to a new location.
+3. If a new repo is found, treat it as the candidate and continue to Phase 4
+   to verify it. Note that moved packages often end up in monorepos, which may
+   require a `subdir` entry in `known_repos` and may use a different tag pattern
+   (e.g., `{name}-v{version}`).
+
 ### Phase 3: Web search
 
 If the data from Phase 2 doesn't reveal the repo, search the web:
