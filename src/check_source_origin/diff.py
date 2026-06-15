@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import fnmatch
 import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +44,33 @@ def is_generated(rel_path: str, extra_patterns: list[str] | None = None) -> bool
             if fnmatch.fnmatch(sub, pattern):
                 return True
     return False
+
+
+_VERSION_LINE_RE = re.compile(
+    r"^__version__\s*(?::\s*str\s*)?=\s*[\"'][^\"']*[\"']\s*$"
+)
+
+
+def _only_version_assignment_changed(
+    sdist_root: Path, vcs_root: Path, rel_path: str
+) -> bool:
+    if not rel_path.endswith(".py"):
+        return False
+    try:
+        sdist_text = (sdist_root / rel_path).read_text()
+        vcs_text = (vcs_root / rel_path).read_text()
+    except Exception:
+        return False
+
+    def mask(text: str) -> str:
+        return "\n".join(
+            "__version__ = _MASKED_"
+            if _VERSION_LINE_RE.match(line)
+            else line
+            for line in text.splitlines()
+        )
+
+    return mask(sdist_text) == mask(vcs_text)
 
 
 def _pyproject_only_version_changed(
@@ -106,6 +134,8 @@ def compare_trees(
         if is_generated(path, extra_ignore):
             generated.append(FileEntry(path=path, digest=sdist_files[path]))
         elif _pyproject_only_version_changed(sdist_root, vcs_root, path):
+            generated.append(FileEntry(path=path, digest=sdist_files[path]))
+        elif _only_version_assignment_changed(sdist_root, vcs_root, path):
             generated.append(FileEntry(path=path, digest=sdist_files[path]))
         else:
             modified.append(

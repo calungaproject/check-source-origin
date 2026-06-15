@@ -193,6 +193,71 @@ class TestCompareTrees:
         assert report.passed is True
         assert report.modified == []
 
+    def test_py_version_only_change_is_generated(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "pkg" / "__init__.py", '__version__ = "2.6.1"\n\nfrom .impl import start\n')
+        _write(vcs / "pkg" / "__init__.py", '__version__ = "2.6.0"\n\nfrom .impl import start\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is True
+        assert report.modified == []
+        assert any(g.path == "pkg/__init__.py" for g in report.generated)
+
+    def test_py_version_and_other_change_stays_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "pkg" / "__init__.py", '__version__ = "2.0"\n\nimport evil\n')
+        _write(vcs / "pkg" / "__init__.py", '__version__ = "1.0"\n\nimport good\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is False
+        assert any(m.path == "pkg/__init__.py" for m in report.modified)
+
+    def test_py_version_type_annotated_is_generated(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "pkg" / "__init__.py", '__version__: str = "2.0"\n')
+        _write(vcs / "pkg" / "__init__.py", '__version__: str = "1.0"\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is True
+        assert report.modified == []
+        assert any(g.path == "pkg/__init__.py" for g in report.generated)
+
+    def test_non_py_version_line_stays_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "pkg" / "VERSION.txt", '__version__ = "2.0"\n')
+        _write(vcs / "pkg" / "VERSION.txt", '__version__ = "1.0"\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is False
+        assert any(m.path == "pkg/VERSION.txt" for m in report.modified)
+
+    def test_py_version_with_trailing_code_stays_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "pkg" / "__init__.py", '__version__ = "2.0"; import os\n')
+        _write(vcs / "pkg" / "__init__.py", '__version__ = "1.0"\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is False
+        assert any(m.path == "pkg/__init__.py" for m in report.modified)
+
+    def test_py_version_with_smuggled_code_stays_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "pkg" / "__init__.py", '__version__ = "2.0"; import os; "3.0"\n')
+        _write(vcs / "pkg" / "__init__.py", '__version__ = "1.0"\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is False
+        assert any(m.path == "pkg/__init__.py" for m in report.modified)
+
+    def test_py_indented_version_stays_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        _write(sdist / "pkg" / "__init__.py", '    __version__ = "2.0"\n')
+        _write(vcs / "pkg" / "__init__.py", '    __version__ = "1.0"\n')
+        report = compare_trees(sdist, vcs)
+        assert report.passed is False
+        assert any(m.path == "pkg/__init__.py" for m in report.modified)
+
     def test_extra_ignore_patterns(self, tmp_path: Path) -> None:
         sdist = tmp_path / "sdist"
         vcs = tmp_path / "vcs"
