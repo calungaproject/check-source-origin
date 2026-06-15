@@ -28,6 +28,15 @@ class GitHubClient:
             base_url=BASE_URL, timeout=30, headers=headers
         )
 
+    def _resolve_ref_object(
+        self, owner: str, repo: str, obj: dict[str, Any]
+    ) -> str | None:
+        if obj.get("type") == "commit":
+            return obj.get("sha")
+        if obj.get("type") == "tag":
+            return self._dereference_tag(owner, repo, obj["sha"])
+        return None
+
     def resolve_tag_commit(
         self, owner: str, repo: str, tag: str
     ) -> str | None:
@@ -36,12 +45,7 @@ class GitHubClient:
             return None
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
-        obj = data.get("object", {})
-        if obj.get("type") == "commit":
-            return obj.get("sha")  # type: ignore[no-any-return]
-        if obj.get("type") == "tag":
-            return self._dereference_tag(owner, repo, obj["sha"])
-        return None
+        return self._resolve_ref_object(owner, repo, data.get("object", {}))
 
     def _dereference_tag(
         self, owner: str, repo: str, tag_sha: str
@@ -113,13 +117,99 @@ class GitHubClient:
             tarball.unlink(missing_ok=True)
         return dest
 
-    def _version_tags(self, name: str, version: str) -> tuple[str, ...]:
-        parts = name.split("-")
-        suffixed = tuple(
-            f"v{version}-{'-'.join(parts[i:])}"
-            for i in range(len(parts) - 1, 0, -1)
+    def _matching_refs(
+        self, owner: str, repo: str, prefix: str
+    ) -> list[dict[str, Any]]:
+        resp = self._client.get(
+            f"/repos/{owner}/{repo}/git/matching-refs/tags/{prefix}"
         )
-        return (f"v{version}", version, f"release-{version}", f"{name}_{version}") + suffixed
+        if resp.status_code in (301, 404):
+            return []
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def _search_tags(
+        self,
+        owner: str,
+        repo: str,
+        name: str,
+        version: str,
+    ) -> str | None:
+        commit = self._search_tags_for_version(owner, repo, name, version)
+        if commit:
+            return commit
+        if version.endswith(".0"):
+            return self._search_tags_for_version(
+                owner, repo, name, version[:-2]
+            )
+        return None
+
+    def _search_tags_for_version(
+        self,
+        owner: str,
+        repo: str,
+        name: str,
+        version: str,
+    ) -> str | None:
+        # Version-prefixed: v{ver}, v{ver}-{suffix}
+        refs = self._matching_refs(owner, repo, f"v{version}")
+        for ref in refs:
+            tag = ref["ref"].removeprefix("refs/tags/")
+            if tag == f"v{version}":
+                commit = self._resolve_ref_object(
+                    owner, repo, ref.get("object", {})
+                )
+                if commit:
+                    return commit
+        parts = name.split("-")
+        for i in range(len(parts) - 1, 0, -1):
+            suffix = "-".join(parts[i:])
+            candidate = f"v{version}-{suffix}"
+            for ref in refs:
+                tag = ref["ref"].removeprefix("refs/tags/")
+                if tag == candidate:
+                    commit = self._resolve_ref_object(
+                        owner, repo, ref.get("object", {})
+                    )
+                    if commit:
+                        return commit
+
+        # Bare version: {ver}
+        refs = self._matching_refs(owner, repo, version)
+        for ref in refs:
+            tag = ref["ref"].removeprefix("refs/tags/")
+            if tag == version:
+                commit = self._resolve_ref_object(
+                    owner, repo, ref.get("object", {})
+                )
+                if commit:
+                    return commit
+
+        # release-{ver}
+        refs = self._matching_refs(owner, repo, f"release-{version}")
+        for ref in refs:
+            tag = ref["ref"].removeprefix("refs/tags/")
+            if tag == f"release-{version}":
+                commit = self._resolve_ref_object(
+                    owner, repo, ref.get("object", {})
+                )
+                if commit:
+                    return commit
+
+        # Name-prefixed with different separators
+        for sep in ("-v", "_", "==", "-"):
+            prefix = f"{name}{sep}{version}"
+            refs = self._matching_refs(owner, repo, prefix)
+            for ref in refs:
+                tag = ref["ref"].removeprefix("refs/tags/")
+                if tag == prefix:
+                    commit = self._resolve_ref_object(
+                        owner, repo, ref.get("object", {})
+                    )
+                    if commit:
+                        return commit
+
+        return None
 
     def resolve_version_commit(
         self, repo_url: str, version: str, name: str
@@ -128,19 +218,18 @@ class GitHubClient:
         if not match:
             return VersionCommitResult(None, repo_url)
         owner, repo = match.group(1), match.group(2)
-        for tag in self._version_tags(name, version):
-            commit = self.resolve_tag_commit(owner, repo, tag)
-            if commit:
-                return VersionCommitResult(commit, repo_url)
+
+        commit = self._search_tags(owner, repo, name, version)
+        if commit:
+            return VersionCommitResult(commit, repo_url)
 
         redirected = self._resolve_redirect(owner, repo)
         if redirected:
             new_owner, new_repo = redirected
             new_url = f"https://github.com/{new_owner}/{new_repo}"
-            for tag in self._version_tags(name, version):
-                commit = self.resolve_tag_commit(new_owner, new_repo, tag)
-                if commit:
-                    return VersionCommitResult(commit, new_url)
+            commit = self._search_tags(new_owner, new_repo, name, version)
+            if commit:
+                return VersionCommitResult(commit, new_url)
             return VersionCommitResult(None, new_url)
 
         return VersionCommitResult(None, repo_url)
