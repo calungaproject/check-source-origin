@@ -32,7 +32,7 @@ class GitHubClient:
         self, owner: str, repo: str, tag: str
     ) -> str | None:
         resp = self._client.get(f"/repos/{owner}/{repo}/git/ref/tags/{tag}")
-        if resp.status_code == 404:
+        if resp.status_code in (301, 404):
             return None
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
@@ -49,7 +49,7 @@ class GitHubClient:
         resp = self._client.get(
             f"/repos/{owner}/{repo}/git/tags/{tag_sha}"
         )
-        if resp.status_code == 404:
+        if resp.status_code in (301, 404):
             return None
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()

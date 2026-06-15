@@ -44,6 +44,13 @@ class TestResolveTagCommit:
         with patch.object(httpx.Client, "get", return_value=resp):
             assert client.resolve_tag_commit("owner", "repo", "v1.0") is None
 
+    def test_returns_none_on_301(self) -> None:
+        resp = httpx.Response(301, headers={"location": "https://api.github.com/repositories/123/git/ref/tags/v1.0"}, request=_FAKE_REQ)
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", return_value=resp):
+            assert client.resolve_tag_commit("owner", "repo", "v1.0") is None
+
     def test_raises_on_403(self) -> None:
         resp = httpx.Response(403, json={"message": "rate limit"}, request=_FAKE_REQ)
         with patch.dict("os.environ", {}, clear=True):
@@ -64,6 +71,13 @@ class TestResolveTagCommit:
 class TestDereferenceTag:
     def test_returns_none_on_404(self) -> None:
         resp = httpx.Response(404, json={}, request=_FAKE_REQ)
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", return_value=resp):
+            assert client._dereference_tag("owner", "repo", "abc123") is None
+
+    def test_returns_none_on_301(self) -> None:
+        resp = httpx.Response(301, headers={"location": "https://api.github.com/repositories/123/git/tags/abc123"}, request=_FAKE_REQ)
         with patch.dict("os.environ", {}, clear=True):
             client = GitHubClient()
         with patch.object(httpx.Client, "get", return_value=resp):
