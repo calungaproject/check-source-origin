@@ -1,11 +1,12 @@
 import subprocess
 import tarfile
+import zipfile
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
 from check_source_origin.models import ResolveResult
-from check_source_origin.verify import clone_repo, find_package_subdir, run_verify
+from check_source_origin.verify import clone_repo, extract_sdist, find_package_subdir, run_verify
 
 
 def _make_sdist_tarball(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -20,6 +21,16 @@ def _make_sdist_tarball(tmp_path: Path, files: dict[str, str]) -> Path:
             info.size = len(data)
             tar.addfile(info, BytesIO(data))
     return tarball
+
+
+def _make_sdist_zip(tmp_path: Path, files: dict[str, str]) -> Path:
+    """Create a .zip with the given relative-path -> content mapping."""
+    prefix = "pkg-1.0"
+    archive = tmp_path / "pkg-1.0.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for rel_path, content in files.items():
+            zf.writestr(f"{prefix}/{rel_path}", content)
+    return archive
 
 
 def _make_git_repo(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -190,6 +201,50 @@ class TestCloneRepo:
         assert not (result / ".git").exists()
         assert not (result / "libs/sub/.git").exists()
         assert (result / ".gitmodules").exists()
+
+
+class TestExtractSdist:
+    def test_extracts_tarball(self, tmp_path: Path) -> None:
+        sdist = _make_sdist_tarball(tmp_path, {"hello.py": "print('hi')"})
+        root = extract_sdist(sdist, tmp_path / "out")
+        assert (root / "hello.py").read_text() == "print('hi')"
+
+    def test_extracts_zip(self, tmp_path: Path) -> None:
+        sdist = _make_sdist_zip(tmp_path, {"hello.py": "print('hi')"})
+        root = extract_sdist(sdist, tmp_path / "out")
+        assert (root / "hello.py").read_text() == "print('hi')"
+
+    def test_zip_unwraps_single_dir(self, tmp_path: Path) -> None:
+        sdist = _make_sdist_zip(tmp_path, {"a.py": "x", "b.py": "y"})
+        root = extract_sdist(sdist, tmp_path / "out")
+        assert root.name == "pkg-1.0"
+        assert (root / "a.py").exists()
+
+
+class TestRunVerifyWithZip:
+    def test_clean_match(self, tmp_path: Path) -> None:
+        source_files = {"src/main.py": "print('hello')"}
+        sdist = _make_sdist_zip(tmp_path, source_files)
+        repo = _make_git_repo(tmp_path, source_files)
+        with (
+            patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
+            patch("check_source_origin.verify.clone_repo", return_value=repo),
+        ):
+            result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
+
+        assert result.diff_report.passed is True
+
+    def test_tampered_file_detected(self, tmp_path: Path) -> None:
+        sdist = _make_sdist_zip(tmp_path, {"src/main.py": "evil()"})
+        repo = _make_git_repo(tmp_path, {"src/main.py": "clean()"})
+        with (
+            patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
+            patch("check_source_origin.verify.clone_repo", return_value=repo),
+        ):
+            result = run_verify("pkg", "1.0", tmp_path, sdist_path=sdist)
+
+        assert result.diff_report.passed is False
+        assert len(result.diff_report.modified) == 1
 
 
 class TestRunVerify:

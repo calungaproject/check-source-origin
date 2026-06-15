@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import tarfile
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -88,25 +89,30 @@ def clone_repo(repo_url: str, ref: str, dest: Path) -> Path:
     return dest
 
 
-def extract_sdist(tarball: Path, dest: Path) -> Path:
-    with tarfile.open(tarball, "r:gz") as tar:
-        tar.extractall(dest, filter="data")
+def extract_sdist(archive: Path, dest: Path) -> Path:
+    if archive.suffix == ".zip":
+        with zipfile.ZipFile(archive, "r") as zf:
+            zf.extractall(dest)
+    else:
+        with tarfile.open(archive, "r:gz") as tar:
+            tar.extractall(dest, filter="data")
     children = list(dest.iterdir())
     if len(children) == 1 and children[0].is_dir():
         return children[0]
     return dest
 
 
-def fetch_sdist(name: str, version: str, output: Path) -> Path:
+def fetch_sdist(name: str, version: str, output_dir: Path) -> Path:
     pypi = PyPIClient()
     meta = pypi.get_version_metadata(name, version)
     sdist_info = PyPIClient.extract_sdist_info(meta)
     if sdist_info is None:
         raise RuntimeError(f"No sdist found for {name}=={version}")
+    filename = sdist_info.get("filename", f"{name}-{version}.tar.gz")
     return download_sdist(
         url=sdist_info["url"],
         expected_sha256=sdist_info["digests"]["sha256"],
-        output=output,
+        output=output_dir / filename,
     )
 
 
@@ -137,7 +143,7 @@ def _do_verify(
     sdist_path: Path | None,
 ) -> VerifyResult:
     if sdist_path is None:
-        sdist_path = fetch_sdist(name, version, tmp / f"{name}-{version}.tar.gz")
+        sdist_path = fetch_sdist(name, version, tmp)
 
     sdist_root = extract_sdist(sdist_path, tmp / "sdist")
     repo_dir = clone_repo(resolved.repo_url, ref, tmp / "repo")

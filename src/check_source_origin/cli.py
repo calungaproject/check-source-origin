@@ -9,7 +9,9 @@ import click
 from .diff import compare_trees
 from .generated import detect_generated_files
 from .resolve import ResolveError, resolve_source
-from .verify import clone_repo, extract_sdist, fetch_sdist, run_verify
+from .download import download_sdist
+from .pypi import PyPIClient
+from .verify import clone_repo, extract_sdist, run_verify
 
 
 class _CLI(click.Group):
@@ -50,9 +52,18 @@ def resolve(name: str, version: str, use_json: bool) -> None:
 @click.option("--output", "-o", type=click.Path(path_type=Path), default=None)
 def download(name: str, version: str, output: Path | None) -> None:
     """Download the sdist for a package version from PyPI."""
+    pypi = PyPIClient()
+    meta = pypi.get_version_metadata(name, version)
+    sdist_info = PyPIClient.extract_sdist_info(meta)
+    if sdist_info is None:
+        raise click.ClickException(f"No sdist found for {name}=={version}")
     if output is None:
-        output = Path(f"{name}-{version}.tar.gz")
-    path = fetch_sdist(name, version, output)
+        output = Path(sdist_info.get("filename", f"{name}-{version}.tar.gz"))
+    path = download_sdist(
+        url=sdist_info["url"],
+        expected_sha256=sdist_info["digests"]["sha256"],
+        output=output,
+    )
     click.echo(f"Downloaded: {path}")
 
 
