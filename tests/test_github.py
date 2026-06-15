@@ -163,6 +163,52 @@ class TestResolveVersionCommit:
         assert result.commit is None
         assert tried == ["v1.0.0", "1.0.0", "release-1.0.0", "mypkg_1.0.0"]
 
+    def test_finds_version_suffixed_tag(self) -> None:
+        """Monorepos like azure-storage-python use 'v{version}-{suffix}' tags."""
+        not_found = httpx.Response(404, json={}, request=_FAKE_REQ)
+        found = httpx.Response(
+            200,
+            json={"object": {"type": "commit", "sha": "abc123"}},
+            request=_FAKE_REQ,
+        )
+
+        def side_effect(url: str, **kwargs: object) -> httpx.Response:
+            if url.endswith("/tags/v2.1.0-common"):
+                return found
+            return not_found
+
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", side_effect=side_effect):
+            result = client.resolve_version_commit(
+                "https://github.com/Azure/azure-storage-python",
+                "2.1.0",
+                name="azure-storage-common",
+            )
+        assert result.commit == "abc123"
+        assert result.repo_url == "https://github.com/Azure/azure-storage-python"
+
+    def test_version_suffixed_tags_try_shortest_suffix_first(self) -> None:
+        """Suffixed tags are tried shortest-first after the base patterns."""
+        not_found = httpx.Response(404, json={}, request=_FAKE_REQ)
+        tried: list[str] = []
+
+        def side_effect(url: str, **kwargs: object) -> httpx.Response:
+            if "/tags/" in str(url):
+                tried.append(str(url).rsplit("/tags/", 1)[1])
+            return not_found
+
+        with patch.dict("os.environ", {}, clear=True):
+            client = GitHubClient()
+        with patch.object(httpx.Client, "get", side_effect=side_effect):
+            client.resolve_version_commit(
+                "https://github.com/owner/repo", "1.0.0", "a-b-c"
+            )
+        assert tried == [
+            "v1.0.0", "1.0.0", "release-1.0.0", "a-b-c_1.0.0",
+            "v1.0.0-c", "v1.0.0-b-c",
+        ]
+
 
 class TestHasFile:
     def test_returns_true_on_200(self) -> None:

@@ -114,7 +114,12 @@ class GitHubClient:
         return dest
 
     def _version_tags(self, name: str, version: str) -> tuple[str, ...]:
-        return (f"v{version}", version, f"release-{version}", f"{name}_{version}")
+        parts = name.split("-")
+        suffixed = tuple(
+            f"v{version}-{'-'.join(parts[i:])}"
+            for i in range(len(parts) - 1, 0, -1)
+        )
+        return (f"v{version}", version, f"release-{version}", f"{name}_{version}") + suffixed
 
     def resolve_version_commit(
         self, repo_url: str, version: str, name: str
