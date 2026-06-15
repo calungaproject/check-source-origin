@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tarfile
 import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from dataclasses import replace
 
@@ -43,6 +49,18 @@ def find_package_subdir(repo_dir: Path, name: str) -> str | None:
                 continue
             if normalize(parent.name) == target:
                 return str(parent.relative_to(repo_dir))
+    for path in repo_dir.rglob("pyproject.toml"):
+        parent = path.parent
+        if parent == repo_dir:
+            continue
+        try:
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
+        except Exception:
+            continue
+        declared = data.get("project", {}).get("name")
+        if isinstance(declared, str) and normalize(declared) == target:
+            return str(parent.relative_to(repo_dir))
     return None
 
 

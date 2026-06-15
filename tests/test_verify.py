@@ -137,6 +137,13 @@ class TestFindPackageSubdir:
         )
         assert find_package_subdir(repo, "my-pkg") == "libs/my_pkg"
 
+    def test_finds_by_pyproject_name(self, tmp_path: Path) -> None:
+        repo = _make_git_repo(
+            tmp_path,
+            {"libs/core/pyproject.toml": '[project]\nname = "langchain-core"\n'},
+        )
+        assert find_package_subdir(repo, "langchain-core") == "libs/core"
+
 
 class TestCloneRepo:
     def test_clone_by_tag(self, tmp_path: Path) -> None:
