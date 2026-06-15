@@ -23,6 +23,13 @@ class TestHashFile:
         f.write_text("hello")
         assert hash_file(f) == _sha256("hello")
 
+    def test_normalizes_crlf_to_lf(self, tmp_path: Path) -> None:
+        f = tmp_path / "crlf.txt"
+        f.write_bytes(b"line1\r\nline2\r\n")
+        lf = tmp_path / "lf.txt"
+        lf.write_bytes(b"line1\nline2\n")
+        assert hash_file(f) == hash_file(lf)
+
 
 class TestIsGenerated:
     def test_pkg_info(self) -> None:
@@ -171,6 +178,17 @@ class TestCompareTrees:
         report = compare_trees(sdist, vcs)
         assert report.passed is False
         assert any(m.path == "pyproject.toml" for m in report.modified)
+
+    def test_crlf_vs_lf_not_modified(self, tmp_path: Path) -> None:
+        sdist = tmp_path / "sdist"
+        vcs = tmp_path / "vcs"
+        sdist.mkdir()
+        vcs.mkdir()
+        (sdist / "main.py").write_bytes(b"print('hi')\r\n")
+        (vcs / "main.py").write_bytes(b"print('hi')\n")
+        report = compare_trees(sdist, vcs)
+        assert report.passed is True
+        assert report.modified == []
 
     def test_extra_ignore_patterns(self, tmp_path: Path) -> None:
         sdist = tmp_path / "sdist"
