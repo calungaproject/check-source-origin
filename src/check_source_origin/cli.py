@@ -119,6 +119,20 @@ def verify(name: str, version: str, use_json: bool, sdist_path: Path | None, det
 
         if use_json:
             click.echo(json.dumps(result.to_dict(), indent=2))
+        elif result.diff_report is None:
+            r = result.resolve_result
+            click.echo(f"Repository: {r.repo_url}")
+            click.echo(f"Commit:     {r.commit or '(unknown)'}")
+            if r.subdir:
+                click.echo(f"Subdir:     {r.subdir}")
+            click.echo(f"Method:     {r.resolution_method}")
+            click.echo()
+            click.secho(
+                f"SKIP — No sdist found for {name}=={version}."
+                " Only a wheel is available on PyPI.",
+                fg="yellow",
+                bold=True,
+            )
         else:
             r = result.resolve_result
             click.echo(f"Repository: {r.repo_url}")
@@ -132,7 +146,7 @@ def verify(name: str, version: str, use_json: bool, sdist_path: Path | None, det
                 sdist_root=result.sdist_root, vcs_root=result.vcs_root,
             )
 
-    if not result.diff_report.passed:
+    if result.diff_report is None or not result.diff_report.passed:
         sys.exit(1)
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from check_source_origin.models import ResolveResult
-from check_source_origin.verify import clone_repo, extract_sdist, fetch_repo, find_package_subdir, run_verify
+from check_source_origin.verify import NoSdistError, clone_repo, extract_sdist, fetch_repo, find_package_subdir, run_verify
 
 
 def _make_sdist_tarball(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -436,6 +436,31 @@ class TestRunVerify:
 
         assert result.resolve_result.subdir == "sdk/synapse/azure-synapse-artifacts"
         assert result.diff_report.passed is True
+
+    def test_no_sdist_returns_structured_result(self, tmp_path: Path) -> None:
+        with (
+            patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
+            patch("check_source_origin.verify.fetch_sdist", side_effect=NoSdistError("pkg", "1.0")),
+        ):
+            result = run_verify("pkg", "1.0", tmp_path)
+
+        assert result.diff_report is None
+        assert result.reason == "no_sdist"
+        assert result.resolve_result == _RESOLVE
+
+    def test_no_sdist_to_dict(self, tmp_path: Path) -> None:
+        import json
+
+        with (
+            patch("check_source_origin.verify.resolve_source", return_value=_RESOLVE),
+            patch("check_source_origin.verify.fetch_sdist", side_effect=NoSdistError("pkg", "1.0")),
+        ):
+            result = run_verify("pkg", "1.0", tmp_path)
+
+        d = result.to_dict()
+        json.dumps(d)
+        assert d["diff"] is None
+        assert d["reason"] == "no_sdist"
 
     def test_to_dict_serializable(self, tmp_path: Path) -> None:
         source_files = {"main.py": "x"}

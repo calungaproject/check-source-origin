@@ -26,18 +26,29 @@ from .pypi import PyPIClient
 from .resolve import resolve_source
 
 
+class NoSdistError(Exception):
+    def __init__(self, name: str, version: str) -> None:
+        self.name = name
+        self.version = version
+        super().__init__(f"No sdist found for {name}=={version}")
+
+
 @dataclass(frozen=True)
 class VerifyResult:
     resolve_result: ResolveResult
-    diff_report: DiffReport
+    diff_report: DiffReport | None = None
     sdist_root: Path | None = None
     vcs_root: Path | None = None
+    reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "resolve": self.resolve_result.to_dict(),
-            "diff": self.diff_report.to_dict(),
+            "diff": self.diff_report.to_dict() if self.diff_report else None,
         }
+        if self.reason:
+            d["reason"] = self.reason
+        return d
 
 
 def find_package_subdir(repo_dir: Path, name: str) -> str | None:
@@ -136,7 +147,7 @@ def fetch_sdist(name: str, version: str, output_dir: Path) -> Path:
     meta = pypi.get_version_metadata(name, version)
     sdist_info = PyPIClient.extract_sdist_info(meta)
     if sdist_info is None:
-        raise RuntimeError(f"No sdist found for {name}=={version}")
+        raise NoSdistError(name, version)
     filename = sdist_info.get("filename", f"{name}-{version}.tar.gz")
     return download_sdist(
         url=sdist_info["url"],
@@ -172,7 +183,10 @@ def _do_verify(
     sdist_path: Path | None,
 ) -> VerifyResult:
     if sdist_path is None:
-        sdist_path = fetch_sdist(name, version, tmp)
+        try:
+            sdist_path = fetch_sdist(name, version, tmp)
+        except NoSdistError:
+            return VerifyResult(resolve_result=resolved, reason="no_sdist")
 
     sdist_root = extract_sdist(sdist_path, tmp / "sdist")
     repo_dir = fetch_repo(resolved.repo_url, ref, tmp / "repo")

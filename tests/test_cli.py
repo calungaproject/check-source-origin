@@ -190,6 +190,53 @@ class TestCLI:
         assert "--subdir" in result.output
 
 
+class TestVerifyNoSdist:
+    def test_no_sdist_shows_skip_and_exits_1(self) -> None:
+        from unittest.mock import patch
+
+        from check_source_origin.models import ResolveResult
+        from check_source_origin.verify import VerifyResult
+
+        resolve_result = ResolveResult(
+            repo_url="https://github.com/test/pkg",
+            commit="abc123",
+            tag=None,
+            resolution_method="related_project",
+        )
+        result = VerifyResult(resolve_result=resolve_result, reason="no_sdist")
+
+        runner = CliRunner()
+        with patch("check_source_origin.cli.run_verify", return_value=result):
+            cli_result = runner.invoke(main, ["verify", "pkg", "1.0"])
+        assert cli_result.exit_code == 1
+        assert "SKIP" in cli_result.output
+        assert "No sdist" in cli_result.output
+        assert "Traceback" not in cli_result.output
+
+    def test_no_sdist_json_output(self) -> None:
+        import json
+        from unittest.mock import patch
+
+        from check_source_origin.models import ResolveResult
+        from check_source_origin.verify import VerifyResult
+
+        resolve_result = ResolveResult(
+            repo_url="https://github.com/test/pkg",
+            commit="abc123",
+            tag=None,
+            resolution_method="related_project",
+        )
+        result = VerifyResult(resolve_result=resolve_result, reason="no_sdist")
+
+        runner = CliRunner()
+        with patch("check_source_origin.cli.run_verify", return_value=result):
+            cli_result = runner.invoke(main, ["verify", "--json-output", "pkg", "1.0"])
+        assert cli_result.exit_code == 1
+        data = json.loads(cli_result.output)
+        assert data["diff"] is None
+        assert data["reason"] == "no_sdist"
+
+
 class TestErrorHandling:
     def test_resolve_error_shows_message_without_traceback(self) -> None:
         from unittest.mock import patch
